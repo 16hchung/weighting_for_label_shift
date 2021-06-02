@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import pandas as pd
+from torch.nn import functional as F
 
 try:
     import wandb
@@ -204,14 +205,12 @@ def get_model_prefix(dataset, config):
         f"{dataset_name}_{replicate_str}_")
     return prefix
 
-def idx2onehot(a,k):
-    a=a.astype(int)
-    b = np.zeros((a.size, k))
-    b[np.arange(a.size), a] = 1
-    return b
-
 def confusion_matrix(ytrue, ypred,k):
     # C[i,j] denotes the frequency of ypred = i, ytrue = j.
-    n = ytrue.size
-    C = np.dot(idx2onehot(ypred,k).T,idx2onehot(ytrue,k))
-    return C/n
+    C = F.one_hot(ypred,k).T @ F.one_hot(ytrue,k)
+    return C/len(ytrue)
+
+def get_idcs_within_splits(idcs, split, full_dataset):
+    mask = full_dataset.split_array == full_dataset.split_dict[split]
+    split_idx = np.where(mask)[0]
+    return split_idx[idcs]

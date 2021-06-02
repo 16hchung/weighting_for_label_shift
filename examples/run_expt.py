@@ -2,6 +2,7 @@ import os, csv
 import time
 import argparse
 import pandas as pd
+import numpy as np
 import torch
 import torch.nn as nn
 import torchvision
@@ -9,10 +10,13 @@ import sys
 from collections import defaultdict
 
 import wilds
+from wilds.datasets.wilds_dataset import WILDSSubset
 from wilds.common.data_loaders import get_train_loader, get_eval_loader
 from wilds.common.grouper import CombinatorialGrouper
 
-from utils import set_seed, Logger, BatchLogger, log_config, ParseKwargs, load, initialize_wandb, log_group_data, parse_bool, get_model_prefix
+from utils import (set_seed, Logger, BatchLogger, log_config, ParseKwargs, 
+                    load, initialize_wandb, log_group_data, parse_bool, 
+                    get_model_prefix, get_idcs_within_splits)
 from train import train, evaluate
 from algorithms.initializer import initialize_algorithm
 from algorithms.importance_weighting import BBSE
@@ -165,15 +169,14 @@ def main():
     datasets = defaultdict(dict)
     splits = full_dataset.split_dict.keys()
     if config.algorithm == 'BBSE':
-        import pdb;pdb.set_trace() # check seed
         bbse_split_generator = torch.Generator().manual_seed(2147483647)
         bbse_split_ratios = {s:np.array([.6,.4]) for s in splits}
-        bbse_split_ratios['train'] = np.array[.5,.5])
+        bbse_split_ratios['train'] = np.array([.5,.5])
     for split in splits:
         if split == 'train':
             transform = train_transform
             verbose = True
-        elif split 'val':
+        elif split =='val':
             transform = eval_transform
             verbose = True
         else:
@@ -181,19 +184,23 @@ def main():
             verbose = False
         # Get subset
         dataset = full_dataset.get_subset(
-            og_split,
+            split,
             frac=config.frac,
             transform=transform)
 
         if config.algorithm == 'BBSE':
             lengths = (len(dataset) * bbse_split_ratios[split]).astype(int)
-            fit, adapt = torch.utils.data.random_split(dataset, 
+            fit, adapt = torch.utils.data.random_split(range(sum(lengths)), 
                                                        lengths, 
                                                        generator=bbse_split_generator)
-            datasets[split]['dataset'] = fit
-            datasets[f'{split}_adapt']['dataset'] = adapt
+            fit = get_idcs_within_splits(fit, split, full_dataset)
+            adapt = get_idcs_within_splits(adapt, split, full_dataset)
+            datasets[split]['dataset'] = WILDSSubset(full_dataset, fit, transform)
+            datasets[f'{split}_adapt']['dataset'] = WILDSSubset(full_dataset, 
+                                                                adapt, 
+                                                                transform)
         else:
-            datasets[split]['dataset'] = datasets
+            datasets[split]['dataset'] = dataset
 
         subsplits = [split, f'{split}_adapt'] if config.algorithm == 'BBSE' else [split]
         for subsplit in subsplits:
@@ -283,7 +290,8 @@ def main():
 
         if config.algorithm == 'BBSE':
             logger.write('START TRAINING WITH WEIGHTED LOSS')
-            algorithm.setup_for_weighted_training(datasets, 
+            algorithm.setup_for_weighted_training(config,
+                                                  datasets, 
                                                   adapt_split=config.bbse_adapt_split)
             train(
                 algorithm=algorithm,

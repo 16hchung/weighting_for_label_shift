@@ -25,7 +25,6 @@ def run_epoch(algorithm, dataset, general_logger, epoch, config, train):
     # so we manually increment batch_idx
     batch_idx = 0
     iterator = tqdm(dataset['loader']) if config.progress_bar else dataset['loader']
-
     for batch in iterator:
         if train:
             batch_results = algorithm.update(batch)
@@ -101,7 +100,6 @@ def train(algorithm, datasets, general_logger, config, epoch_offset, best_val_me
         save_pred_if_needed(y_pred, datasets['val'], epoch, config, is_best)
 
         # Then run everything else
-        import pdb;pdb.set_trace()
         if config.evaluate_all_splits:
             additional_splits = [split for split in datasets.keys() if split not in ['train','val']]
         else:
