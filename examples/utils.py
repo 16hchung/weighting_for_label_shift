@@ -210,7 +210,8 @@ def confusion_matrix(ytrue, ypred,k):
     C = F.one_hot(ypred,k).T @ F.one_hot(ytrue,k)
     return C/len(ytrue)
 
-def get_idcs_within_splits(ratios, splits, full_dataset, frac, knockout, generator):
+def get_idcs_within_splits(ratios, splits, new_splits, full_dataset, 
+                          frac, knockout, generator):
     split_vals = [full_dataset.split_dict[s] for s in splits]
     mask = np.isin(full_dataset.split_array, split_vals)
     split_idx = np.where(mask)[0]
@@ -223,7 +224,7 @@ def get_idcs_within_splits(ratios, splits, full_dataset, frac, knockout, generat
                                          generator=generator))
     split_idcs = [split_idx[idx] for idx in idcs]
     if knockout is not None and 'train' not in splits:
-        for i, (name, idx) in enumerate(zip(splits, split_idcs)):
+        for i, (name, idx) in enumerate(zip(new_splits, split_idcs)):
             y = full_dataset.y_array[idx]
             knock = idx[y == 1] # remove some fraction of pos labels
             knock = np.random.permutation(knock)[:int(knockout*len(knock))]

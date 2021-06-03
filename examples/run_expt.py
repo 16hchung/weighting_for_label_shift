@@ -202,6 +202,7 @@ def main():
             split_info = bbse_split_info[split]
             split_idcs = get_idcs_within_splits(split_info['ratios'],
                                                 split_info['og_splits'],
+                                                split_info['new_splits'],
                                                 full_dataset,
                                                 config.frac,
                                                 config.bbse_knockout,
