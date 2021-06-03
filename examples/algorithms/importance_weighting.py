@@ -48,7 +48,8 @@ class BBSE(SingleModelAlgorithm):
         # compute confusion matrix
         y_true, y_pred = self.eval_on_loader(config, trainset['loader'])
         confusion = confusion_matrix(y_true, y_pred, 2)
-        import pdb;pdb.set_trace() # TODO log weights
+        print('===================================================')
+        print('CONFUSION MATRIX', confusion)
         eig_min = torch.eig(confusion)[0][:,0].min()
         if eig_min < self.delta:
             return False
@@ -61,6 +62,7 @@ class BBSE(SingleModelAlgorithm):
         self.loss_weights = torch.clamp(
             torch.pinverse(confusion) @ mu_hat, min=0
         ).to(config.device)
+        print('WEIGHTS', self.loss_weights)
         # reset model to start training
         self.reset(config)
         return True
