@@ -11,7 +11,7 @@ from utils import confusion_matrix
 
 class BBSE(SingleModelAlgorithm):
 
-    def __init__(self, config, d_out, grouper, loss, metric, n_train_steps):
+    def __init__(self, config, d_out, grouper, loss, metric, n_train_steps, delta=0):
         model = initialize_model(config, d_out).to(config.device)
         super().__init__(
             config=config,
@@ -24,6 +24,7 @@ class BBSE(SingleModelAlgorithm):
         self.d_out = d_out
         self.n_train_steps = n_train_steps
         self.loss_weights = None
+        self.delta = delta
 
     def reset(self, config):
         self.model = initialize_model(config, self.d_out).to(config.device)
@@ -39,13 +40,18 @@ class BBSE(SingleModelAlgorithm):
         return loss.mean()
 
     def setup_for_weighted_training(self, config, datasets, adapt_split='val'):
+        ''' returns True if should continue training '''
         # compute and save confusion matrix
-        trainset = datasets['train_adapt']
-        evalset = datasets[f'{adapt_split}_adapt']
+        trainset = datasets['train_cm']
+        evalset = datasets[f'{adapt_split}_wts']
         assert trainset['dataset'].n_classes == 2
         # compute confusion matrix
         y_true, y_pred = self.eval_on_loader(config, trainset['loader'])
         confusion = confusion_matrix(y_true, y_pred, 2)
+        import pdb;pdb.set_trace() # TODO log weights
+        eig_min = torch.eig(confusion)[0][:,0].min()
+        if eig_min < self.delta:
+            return False
         # estimate test density
         _, y_pred_te = self.eval_on_loader(config, evalset['loader'])
         pos_freq = y_pred_te.float().mean()
@@ -57,6 +63,7 @@ class BBSE(SingleModelAlgorithm):
         ).to(config.device)
         # reset model to start training
         self.reset(config)
+        return True
 
     def eval_on_loader(self, config, loader):
         epoch_y_true = []

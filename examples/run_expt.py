@@ -42,7 +42,6 @@ def main():
     parser.add_argument('--frac', type=float, default=1.0,
                         help='Convenience parameter that scales all dataset splits down to the specified fraction, for development purposes. Note that this also scales the test set down, so the reported numbers are not comparable with the full test set.')
     parser.add_argument('--version', default=None, type=str)
-    parser.add_argument('--bbse_adapt_split', default='val', help='Can be "val" or "test"')
 
     # Loaders
     parser.add_argument('--loader_kwargs', nargs='*', action=ParseKwargs, default={})
@@ -75,6 +74,7 @@ def main():
     parser.add_argument('--irm_lambda', type=float)
     parser.add_argument('--irm_penalty_anneal_iters', type=int)
     parser.add_argument('--algo_log_metric')
+    parser.add_argument('--bbse_knockout',type=float,default=None)
 
     # Model selection
     parser.add_argument('--val_metric')
@@ -117,7 +117,7 @@ def main():
 
     config = parser.parse_args()
     config = populate_defaults(config)
-
+    
     # set device
     config.device = torch.device("cuda:" + str(config.device)) if torch.cuda.is_available() else torch.device("cpu")
 
@@ -170,8 +170,21 @@ def main():
     splits = full_dataset.split_dict.keys()
     if config.algorithm == 'BBSE':
         bbse_split_generator = torch.Generator().manual_seed(2147483647)
-        bbse_split_ratios = {s:np.array([.6,.4]) for s in splits}
-        bbse_split_ratios['train'] = np.array([.5,.5])
+        bbse_split_info = {
+            'train':{'og_splits':['train','id_val'],
+                     'ratios':np.array([.45,.45,.1]),
+                     'new_splits':['train','train_cm','id_val'],
+                     'new_names':['Train','Train Adapt','Validation (ID)']},
+            'val':{'og_splits':['val'],
+                   'ratios':np.array([.7,.3]),
+                   'new_splits':['val','val_wts'],
+                   'new_names':['Validation (OOD)', 'Validation Adapt (OOD)']},
+            'test':{'og_splits':['test'],
+                    'ratios':np.array([.7,.3]),
+                    'new_splits':['test','test_wts'],
+                    'new_names':['Test', 'Test Adapt']},
+        }
+        splits = bbse_split_info.keys()
     for split in splits:
         if split == 'train':
             transform = train_transform
@@ -182,29 +195,33 @@ def main():
         else:
             transform = eval_transform
             verbose = False
-        # Get subset
-        dataset = full_dataset.get_subset(
-            split,
-            frac=config.frac,
-            transform=transform)
 
+        subsplits = [split]
+        names = [full_dataset.split_names[split]]
         if config.algorithm == 'BBSE':
-            lengths = (len(dataset) * bbse_split_ratios[split]).astype(int)
-            fit, adapt = torch.utils.data.random_split(range(sum(lengths)), 
-                                                       lengths, 
-                                                       generator=bbse_split_generator)
-            fit = get_idcs_within_splits(fit, split, full_dataset)
-            adapt = get_idcs_within_splits(adapt, split, full_dataset)
-            datasets[split]['dataset'] = WILDSSubset(full_dataset, fit, transform)
-            datasets[f'{split}_adapt']['dataset'] = WILDSSubset(full_dataset, 
-                                                                adapt, 
-                                                                transform)
+            split_info = bbse_split_info[split]
+            split_idcs = get_idcs_within_splits(split_info['ratios'],
+                                                split_info['og_splits'],
+                                                full_dataset,
+                                                config.frac,
+                                                config.bbse_knockout,
+                                                bbse_split_generator)
+            subsplits = split_info['new_splits']
+            names = split_info['new_names']
+            for subsplit, idcs in zip(subsplits, split_idcs):
+                datasets[subsplit]['dataset'] = WILDSSubset(full_dataset, 
+                                                            idcs, 
+                                                            transform)
         else:
+            # Get subset
+            dataset = full_dataset.get_subset(
+                split,
+                frac=config.frac,
+                transform=transform)
             datasets[split]['dataset'] = dataset
 
-        subsplits = [split, f'{split}_adapt'] if config.algorithm == 'BBSE' else [split]
-        for subsplit in subsplits:
-            if split == 'train':
+        for subsplit, name in zip(subsplits, names):
+            if subsplit == 'train':
                 datasets[subsplit]['loader'] = get_train_loader(
                     loader=config.train_loader,
                     dataset=datasets[subsplit]['dataset'],
@@ -223,9 +240,8 @@ def main():
                     **config.loader_kwargs)
 
             # Set fields
-            suffix = ' Adapt' if 'adapt' in subsplit else ''
             datasets[subsplit]['split'] = subsplit
-            datasets[subsplit]['name'] = full_dataset.split_names[split] + suffix
+            datasets[subsplit]['name'] = name
             datasets[subsplit]['verbose'] = verbose
 
             # Loggers
@@ -286,20 +302,22 @@ def main():
             general_logger=logger,
             config=config,
             epoch_offset=epoch_offset,
-            best_val_metric=best_val_metric)
+            best_val_metric=best_val_metric,
+            val_set='id_val')
 
         if config.algorithm == 'BBSE':
             logger.write('START TRAINING WITH WEIGHTED LOSS')
             algorithm.setup_for_weighted_training(config,
                                                   datasets, 
-                                                  adapt_split=config.bbse_adapt_split)
+                                                  adapt_split='val')
             train(
                 algorithm=algorithm,
                 datasets=datasets,
                 general_logger=logger,
                 config=config,
                 epoch_offset=epoch_offset,
-                best_val_metric=best_val_metric)
+                best_val_metric=best_val_metric,
+                val_set='val')
     else:
         if config.eval_epoch is None:
             eval_model_path = model_prefix + 'epoch:best_model.pth'

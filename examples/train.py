@@ -73,7 +73,8 @@ def run_epoch(algorithm, dataset, general_logger, epoch, config, train):
     return results, epoch_y_pred
 
 
-def train(algorithm, datasets, general_logger, config, epoch_offset, best_val_metric):
+def train(algorithm, datasets, general_logger, config, epoch_offset, 
+          best_val_metric, val_set):
     for epoch in range(epoch_offset, config.n_epochs):
         general_logger.write('\nEpoch [%d]:\n' % epoch)
 
@@ -81,7 +82,7 @@ def train(algorithm, datasets, general_logger, config, epoch_offset, best_val_me
         run_epoch(algorithm, datasets['train'], general_logger, epoch, config, train=True)
 
         # Then run val
-        val_results, y_pred = run_epoch(algorithm, datasets['val'], general_logger, epoch, config, train=False)
+        val_results, y_pred = run_epoch(algorithm, datasets[val_set], general_logger, epoch, config, train=False)
         curr_val_metric = val_results[config.val_metric]
         general_logger.write(f'Validation {config.val_metric}: {curr_val_metric:.3f}\n')
 
@@ -96,12 +97,12 @@ def train(algorithm, datasets, general_logger, config, epoch_offset, best_val_me
             best_val_metric = curr_val_metric
             general_logger.write(f'Epoch {epoch} has the best validation performance so far.\n')
 
-        save_model_if_needed(algorithm, datasets['val'], epoch, config, is_best, best_val_metric)
-        save_pred_if_needed(y_pred, datasets['val'], epoch, config, is_best)
+        save_model_if_needed(algorithm, datasets[val_set], epoch, config, is_best, best_val_metric)
+        save_pred_if_needed(y_pred, datasets[val_set], epoch, config, is_best)
 
         # Then run everything else
         if config.evaluate_all_splits:
-            additional_splits = [split for split in datasets.keys() if split not in ['train','val']]
+            additional_splits = [split for split in datasets.keys() if split not in ['train',val_set]]
         else:
             additional_splits = config.eval_splits
         for split in additional_splits:

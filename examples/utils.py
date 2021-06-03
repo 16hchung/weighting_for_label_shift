@@ -210,7 +210,22 @@ def confusion_matrix(ytrue, ypred,k):
     C = F.one_hot(ypred,k).T @ F.one_hot(ytrue,k)
     return C/len(ytrue)
 
-def get_idcs_within_splits(idcs, split, full_dataset):
-    mask = full_dataset.split_array == full_dataset.split_dict[split]
+def get_idcs_within_splits(ratios, splits, full_dataset, frac, knockout, generator):
+    split_vals = [full_dataset.split_dict[s] for s in splits]
+    mask = np.isin(full_dataset.split_array, split_vals)
     split_idx = np.where(mask)[0]
-    return split_idx[idcs]
+    if frac < 1.0:
+        num_to_retain = int(np.round(float(len(split_idx)) * frac))
+        split_idx = np.sort(np.random.permutation(split_idx)[:num_to_retain])
+    lengths = (len(split_idx) * ratios).astype(int)
+    idcs = list(torch.utils.data.random_split(range(lengths.sum()),
+                                         lengths,
+                                         generator=generator))
+    split_idcs = [split_idx[idx] for idx in idcs]
+    if knockout is not None and 'train' not in splits:
+        for i, (name, idx) in enumerate(zip(splits, split_idcs)):
+            y = full_dataset.y_array[idx]
+            knock = idx[y == 1] # remove some fraction of pos labels
+            knock = np.random.permutation(knock)[:int(knockout*len(knock))]
+            split_idcs[i] = idx[~np.isin(idx, knock)]
+    return split_idcs
