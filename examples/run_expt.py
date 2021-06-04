@@ -96,7 +96,7 @@ def main():
 
     # Evaluation
     parser.add_argument('--process_outputs_function', choices = supported.process_outputs_functions)
-    parser.add_argument('--evaluate_all_splits', type=parse_bool, const=True, nargs='?', default=True)
+    parser.add_argument('--evaluate_all_splits', type=parse_bool, const=True, nargs='?', default=False)
     parser.add_argument('--eval_splits', nargs='+', default=[])
     parser.add_argument('--eval_only', type=parse_bool, const=True, nargs='?', default=False)
     parser.add_argument('--eval_epoch', default=None, type=int, help='If eval_only is set, then eval_epoch allows you to specify evaluating at a particular epoch. By default, it evaluates the best epoch by validation performance.')
