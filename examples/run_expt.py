@@ -171,10 +171,11 @@ def main():
     if config.algorithm == 'BBSE':
         bbse_split_generator = torch.Generator().manual_seed(2147483647)
         bbse_split_info = {
-            'train':{'og_splits':['train','id_val'],
-                     'ratios':np.array([.45,.45,.1]),
-                     'new_splits':['train','train_cm','id_val'],
-                     'new_names':['Train','Train Adapt','Validation (ID)']},
+            'train':{'og_splits':['train','id_val', 'val'],
+                     'ratios':np.array([.35,.35,.2,.1]),
+                     'new_splits':['train','train_cm','id_val','id_val_wts'],
+                     'new_names':['Train','Train Adapt',
+                                  'Validation (ID)','Validation Adapt (ID)']},
             'val':{'og_splits':['val'],
                    'ratios':np.array([.7,.3]),
                    'new_splits':['val','val_wts'],
@@ -310,7 +311,8 @@ def main():
             logger.write('START TRAINING WITH WEIGHTED LOSS')
             algorithm.setup_for_weighted_training(config,
                                                   datasets, 
-                                                  adapt_split='val')
+                                                  logger,
+                                                  adapt_split='id_val')
             train(
                 algorithm=algorithm,
                 datasets=datasets,
@@ -318,7 +320,7 @@ def main():
                 config=config,
                 epoch_offset=epoch_offset,
                 best_val_metric=best_val_metric,
-                val_set='val')
+                val_set='id_val')
     else:
         if config.eval_epoch is None:
             eval_model_path = model_prefix + 'epoch:best_model.pth'

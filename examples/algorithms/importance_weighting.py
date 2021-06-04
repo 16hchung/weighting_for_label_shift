@@ -39,7 +39,10 @@ class BBSE(SingleModelAlgorithm):
             loss = loss * self.loss_weights[results['y_true']]
         return loss.mean()
 
-    def setup_for_weighted_training(self, config, datasets, adapt_split='val'):
+    def setup_for_weighted_training(self, 
+            config, datasets, 
+            logger,
+            adapt_split='val'):
         ''' returns True if should continue training '''
         # compute and save confusion matrix
         trainset = datasets['train_cm']
@@ -48,13 +51,14 @@ class BBSE(SingleModelAlgorithm):
         # compute confusion matrix
         y_true, y_pred = self.eval_on_loader(config, trainset['loader'])
         confusion = confusion_matrix(y_true, y_pred, 2)
-        print('===================================================')
-        print('CONFUSION MATRIX', confusion)
+        logger.write('===================================================')
+        logger.write(f'CONFUSION MATRIX: {confusion}')
         eig_min = torch.eig(confusion)[0][:,0].min()
         if eig_min < self.delta:
             return False
         # estimate test density
-        _, y_pred_te = self.eval_on_loader(config, evalset['loader'])
+        y_true_te, y_pred_te = self.eval_on_loader(config, evalset['loader'])
+        logger.write(f'ACC of f on unlabelled test: {(y_true_te == y_pred_te).float().mean()}')
         pos_freq = y_pred_te.float().mean()
         neg_freq = 1 - pos_freq
         mu_hat = torch.Tensor([neg_freq, pos_freq])
@@ -62,7 +66,7 @@ class BBSE(SingleModelAlgorithm):
         self.loss_weights = torch.clamp(
             torch.pinverse(confusion) @ mu_hat, min=0
         ).to(config.device)
-        print('WEIGHTS', self.loss_weights)
+        logger.write(f'WEIGHTS: {self.loss_weights}')
         # reset model to start training
         self.reset(config)
         return True

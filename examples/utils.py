@@ -223,8 +223,9 @@ def get_idcs_within_splits(ratios, splits, new_splits, full_dataset,
                                          lengths,
                                          generator=generator))
     split_idcs = [split_idx[idx] for idx in idcs]
-    if knockout is not None and 'train' not in splits:
+    if knockout is not None:
         for i, (name, idx) in enumerate(zip(new_splits, split_idcs)):
+            if 'train' in name: continue
             y = full_dataset.y_array[idx]
             knock = idx[y == 1] # remove some fraction of pos labels
             knock = np.random.permutation(knock)[:int(knockout*len(knock))]
